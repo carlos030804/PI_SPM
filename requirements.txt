@@ -1,0 +1,11 @@
+flet==0.9.0
+mysql-connector-python==8.1.0
+bcrypt==4.0.1
+python-dotenv==1.0.0
+matplotlib==3.7.1; sys_platform != 'win32'
+matplotlib==3.7.1; sys_platform == 'win32' and python_version < '3.10'
+matplotlib==3.8.0; sys_platform == 'win32' and python_version >= '3.10'
+numpy==1.24.3; sys_platform != 'win32'
+numpy==1.24.3; sys_platform == 'win32' and python_version < '3.10'
+numpy==1.26.0; sys_platform == 'win32' and python_version >= '3.10'
+Pillow==10.0.0
