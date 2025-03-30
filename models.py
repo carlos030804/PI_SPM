@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict, Union, Any
 from database import DatabaseManager
 import logging
 

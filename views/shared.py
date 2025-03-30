@@ -1,6 +1,6 @@
 import flet as ft
 from flet import icons
-from typing import Optional, Callable, Union, List
+from typing import Optional, Callable, Union, List, Any
 import logging
 from models import User, AthleteProfile, CoachProfile
 from database import DatabaseManager
@@ -472,3 +472,19 @@ def show_register(page: ft.Page, db: DatabaseManager):
             page.update()
             
             # Limpiar formulario después de 3 segundos
+            def clear_form():
+                email_field.value = ""
+                password_field.value = ""
+                confirm_password_field.value = ""
+                user_type_dropdown.value = None
+                additional_fields.controls.clear()
+                success_text.value = ""
+                page.update()
+            
+            page.run_task(lambda: page.run_once(clear_form, delay=3))
+        except Exception as e:  # <- ¡Esto es lo que faltaba!
+            logger.error(f"Error during registration: {e}")
+            error_text.value = "An error occurred during registration"
+            page.update()
+        finally:
+            hide_loading(page, loading)
