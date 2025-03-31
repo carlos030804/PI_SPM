@@ -388,14 +388,32 @@ def show_register(page: ft.Page, db: DatabaseManager):
                 success_text.value = ""
                 page.update()
             
-            page.run_task(lambda: page.run_once(clear_form, delay=3))
+            # page.run_task(lambda: page.run_once(clear_form, delay=3))
+            # page.run_later(lambda: clear_form(), delay=3)
+            import threading
+            timer = threading.Timer(3.0, clear_form)
+            timer.start()
+
+           
         except Exception as e:  # <- ¡Esto es lo que faltaba!
-            logger.error(f"Error during registration: {e}")
-            error_text.value = "An error occurred during registration"
+
+            logger.error(f"Error during registration: {str(e)}", exc_info=True)
+            error_text.value = f"An error occurred during registration: {str(e)}"
+            if conn:
+                try:
+                    DatabaseManager.rollback_transaction(conn)
+                except Exception as rollback_error:
+                    logger.error(f"Rollback error: {str(rollback_error)}")
             page.update()
         finally:
             hide_loading(page, loading)
-        pass  # Mantén todo el contenido de esta función igual
+            # Asegurar que la conexión se cierre si aún existe
+            if 'conn' in locals() and conn:
+                try:
+                    conn.close()
+                except:
+                    pass
+        # pass  # Mantén todo el contenido de esta función igual
 
 
         # Configurar el event handler para el dropdown
