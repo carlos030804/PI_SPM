@@ -495,6 +495,8 @@ def show_register(page: ft.Page, db: DatabaseManager):
 
 def show_login(page: ft.Page, db: DatabaseManager):
     """Muestra la pantalla de login"""
+    page.clean()
+    page.appbar = None  # Asegurarse que no hay AppBar
     # Campos del formulario
     email_field = create_text_field("Email")
     password_field = create_text_field("Password", password=True)
