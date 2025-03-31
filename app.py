@@ -47,6 +47,18 @@ class SportProApp:
 
 def main(page: ft.Page):
     app = SportProApp(page)
+    db = DatabaseManager()
+
+    def route_change(route):
+        if page.route == "/register":
+            from views.shared import show_register
+            show_register(page, db)
+        elif page.route == "/login":
+            from views.shared import show_login
+            show_login(page, db)
+
+    page.on_route_change = route_change
+    page.go(page.route)
 
 if __name__ == "__main__":
     ft.app(

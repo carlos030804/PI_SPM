@@ -45,38 +45,46 @@ class DatabaseManager:
         query: str,
         params: Optional[tuple] = None,
         fetch_one: bool = False,
-        commit: bool = False
+        commit: bool = False,
+        conn: Optional[Any] = None  # Nueva opción para conexión existente
     ) -> Union[Dict[str, Any], List[Dict[str, Any]], None]:
         """
         Ejecuta una consulta SQL y devuelve los resultados
-        
+    
         Args:
             query: Consulta SQL
             params: Parámetros para la consulta
             fetch_one: Si True, devuelve solo un registro
             commit: Si True, hace commit de la transacción
+            conn: Conexión existente (opcional). Si no se proporciona, se crea una nueva.
             
         Returns:
             Resultados de la consulta (dict, list o None)
         """
-        conn = None
         cursor = None
+        should_close_conn = False  # Determina si debemos cerrar la conexión al final
+    
         try:
-            conn = cls.get_connection()
+            # Si no se proporciona una conexión, obtenemos una nueva
+            if conn is None:
+                conn = cls.get_connection()
+                should_close_conn = True
+        
             cursor = conn.cursor(dictionary=True)
-            
             cursor.execute(query, params or ())
-            
-            if commit:
+        
+            # Solo hacemos commit si se solicita EXPLÍCITAMENTE y es una conexión nueva
+            if commit and should_close_conn:
                 conn.commit()
-                return None
-            
+        
+            # Si es una consulta de selección, retornamos resultados
             if fetch_one:
-                result = cursor.fetchone()
-            else:
-                result = cursor.fetchall()
-            
-            return result
+                return cursor.fetchone()
+            elif query.strip().upper().startswith(('SELECT', 'SHOW', 'DESCRIBE')):
+                return cursor.fetchall()
+        
+            return None
+        
         except Error as e:
             logger.error(f"Database error: {e}")
             if conn:
@@ -85,7 +93,8 @@ class DatabaseManager:
         finally:
             if cursor:
                 cursor.close()
-            if conn:
+            # Solo cerramos la conexión si la creamos nosotros
+            if should_close_conn and conn:
                 conn.close()
     
     @classmethod
@@ -104,6 +113,36 @@ class DatabaseManager:
         if cls._connection_pool:
             cls._connection_pool.close_all()
             logger.info("Database connection pool closed")
+
+   #Nuevos metodos
+    @classmethod
+    def start_transaction(cls):
+        """Inicia una transacción explícita"""
+        conn = cls.get_connection()
+        conn.autocommit = False  # Desactiva el autocommit
+        return conn
+
+    @classmethod
+    def commit_transaction(cls, conn):
+        """Confirma una transacción"""
+        try:
+            conn.commit()
+        except Error as e:
+            logger.error(f"Error committing transaction: {e}")
+            raise
+        finally:
+            conn.close()
+
+    @classmethod
+    def rollback_transaction(cls, conn):
+        """Revierte una transacción"""
+        try:
+            conn.rollback()
+        except Error as e:
+            logger.error(f"Error rolling back transaction: {e}")
+            raise
+        finally:
+            conn.close()
 
 # Funciones de compatibilidad
 def init_db():
