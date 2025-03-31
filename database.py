@@ -23,7 +23,7 @@ class DatabaseManager:
                     pool_size=5,
                     host=os.getenv("DB_HOST", "localhost"),
                     user=os.getenv("DB_USER", "root"),
-                    password=os.getenv("DB_PASSWORD", ""),
+                    password=os.getenv("DB_PASSWORD", "root"),
                     database=os.getenv("DB_NAME", "aplicacion_deportiva"),
                     pool_reset_session=True
                 )

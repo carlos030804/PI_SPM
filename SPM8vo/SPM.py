@@ -23,7 +23,7 @@ def init_db():
         conn = mysql.connector.connect(
             host="localhost",
             user="root",
-            password="",
+            password="root",
             database="aplicacion_deportiva"
         )
         return conn

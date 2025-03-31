@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 def show_athlete_dashboard(page: ft.Page, db):
     # Mostrar loading
+    if not page.session.get("user_id"):
+        return logout(page, db)
+    
     loading = show_loading(page)
     
     try:
@@ -39,41 +42,40 @@ def show_athlete_dashboard(page: ft.Page, db):
         
         # Construir UI
         page.clean()
+
+        # Configurar el AppBar primero
+        page.appbar = create_app_bar(
+            "Athlete Dashboard",
+            actions=[
+                ft.IconButton(
+                    icon=icons.LOGOUT,
+                    icon_color="white",
+                    on_click=lambda e: logout(page, db),  # Pasa db aquí
+                    tooltip="Logout"
+                )
+            ]
+        )
+
+        # Configurar el contenido principal SIN incluir el AppBar
         page.add(
-            ft.Column(
-                controls=[
-                    create_app_bar(
-                        "Athlete Dashboard",
-                        actions=[
-                            ft.IconButton(
-                                icon=icons.LOGOUT,
-                                icon_color="white",
-                                on_click=lambda e: logout(page),
-                                tooltip="Logout"
-                            )
-                        ]
-                    ),
-                    ft.Container(
-                        content=ft.Column(
-                            controls=[
-                                _create_profile_section(page, profile),
-                                _create_hr_zones_section(hr_zones, chart_img, profile) 
-                                if profile.max_hr and profile.resting_hr 
-                                else ft.Container(),
-                                _create_workouts_section(page, workouts)
-                            ],
-                            spacing=20,
-                            scroll=ft.ScrollMode.AUTO,
-                            expand=True
-                        ),
-                        padding=20,
-                        expand=True
-                    )
-                ],
-                spacing=0,
+            ft.Container(
+                content=ft.Column(
+                    controls=[
+                        _create_profile_section(page, profile),
+                        _create_hr_zones_section(hr_zones, chart_img, profile) 
+                        if profile.max_hr and profile.resting_hr 
+                        else ft.Container(),
+                        _create_workouts_section(page, workouts)
+                    ],
+                    spacing=20,
+                    scroll=ft.ScrollMode.AUTO,
+                    expand=True
+                ),
+                padding=20,
                 expand=True
             )
         )
+
     except Exception as e:
         logger.error(f"Error loading athlete dashboard: {e}")
         show_alert(page, f"Error loading dashboard: {str(e)}", "error")
@@ -694,8 +696,22 @@ def create_hr_zones_chart(zones: dict, resting_hr: int) -> str:
         logger.error(f"Error creating HR zones chart: {e}")
         return ""
 
-def logout(page: ft.Page):
+def logout(page: ft.Page, db):
     """Cierra la sesión y redirige al login"""
-    page.session.clear()
-    from views.shared import show_login
-    show_login(page)
+    try:
+        # Limpiar completamente la página
+        page.clean()
+        page.appbar = None  # Eliminar el AppBar actual
+        
+        # Limpiar la sesión
+        page.session.clear()
+        
+        # Redirigir al login
+        from views.shared import show_login
+        show_login(page, db)
+        
+        # Forzar actualización de la página
+        page.update()
+    except Exception as e:
+        logger.error(f"Error during logout: {e}")
+        show_alert(page, "Error during logout", "error")
