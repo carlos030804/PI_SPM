@@ -1,6 +1,6 @@
 import flet as ft
 from flet import icons
-from typing import Optional, Callable, Union, List, Any
+from typing import Optional, Callable, Union, List
 import logging
 from models import User, AthleteProfile, CoachProfile
 from database import DatabaseManager
@@ -200,123 +200,6 @@ def hide_loading(page: ft.Page, loading_control: ft.Container) -> None:
     page.overlay.remove(loading_control)
     page.update()
 
-def show_login(page: ft.Page, db: DatabaseManager):
-    """Muestra la pantalla de login"""
-    # Campos del formulario
-    email_field = create_text_field("Email")
-    password_field = create_text_field("Password", password=True)
-    error_text = ft.Text("", color=COLORS["error"])
-    
-    def on_login(e):
-        """Maneja el evento de login"""
-        email = email_field.value.strip()
-        password = password_field.value
-        
-        if not email or not password:
-            error_text.value = "Email and password are required"
-            page.update()
-            return
-        
-        loading = show_loading(page, "Signing in...")
-        
-        try:
-            user = User.authenticate(email, password)
-            
-            if user:
-                user.update_last_login()
-                page.session.set("user_id", user.id)
-                page.session.set("user_type", user.type)
-                
-                # Redirigir según el tipo de usuario
-                if user.type == "administrador":
-                    from views.admin import show_admin_dashboard
-                    show_admin_dashboard(page, db)
-                elif user.type == "entrenador":
-                    from views.coach import show_coach_dashboard
-                    show_coach_dashboard(page, db)
-                else:
-                    from views.athlete import show_athlete_dashboard
-                    show_athlete_dashboard(page, db)
-            else:
-                error_text.value = "Invalid email or password"
-                page.update()
-        except Exception as e:
-            logger.error(f"Login error: {e}")
-            error_text.value = "An error occurred during login"
-            page.update()
-        finally:
-            hide_loading(page, loading)
-    
-    def on_navigate_to_register(e):
-        """Navega a la pantalla de registro"""
-        show_register(page, db)
-    
-    # Construir la interfaz
-    page.clean()
-    page.add(
-        ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Image(
-                        src="assets/logo.png",
-                        width=150,
-                        height=150,
-                        fit=ft.ImageFit.CONTAIN
-                    ),
-                    ft.Text(
-                        "SportPro", 
-                        size=32, 
-                        weight=ft.FontWeight.BOLD, 
-                        color=COLORS["primary"]
-                    ),
-                    ft.Text(
-                        "Sports Management System", 
-                        size=16, 
-                        color=COLORS["text"]
-                    ),
-                    create_card(
-                        ft.Column(
-                            controls=[
-                                ft.Text(
-                                    "Login", 
-                                    size=20, 
-                                    weight=ft.FontWeight.BOLD, 
-                                    color=COLORS["text"]
-                                ),
-                                email_field,
-                                password_field,
-                                create_button("Login", on_login),
-                                error_text,
-                                ft.Row(
-                                    controls=[
-                                        ft.Text(
-                                            "Don't have an account?", 
-                                            color=COLORS["text"]
-                                        ),
-                                        ft.TextButton(
-                                            "Register", 
-                                            on_click=on_navigate_to_register, 
-                                            style=ft.ButtonStyle(
-                                                color=COLORS["primary"]
-                                            )
-                                        )
-                                    ],
-                                    alignment=ft.MainAxisAlignment.CENTER
-                                )
-                            ],
-                            spacing=15,
-                            horizontal_alignment=ft.CrossAxisAlignment.CENTER
-                        )
-                    )
-                ],
-                spacing=20,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER
-            ),
-            alignment=ft.alignment.center,
-            padding=40,
-            expand=True
-        )
-    )
 
 def show_register(page: ft.Page, db: DatabaseManager):
     """Muestra la pantalla de registro"""
@@ -338,7 +221,7 @@ def show_register(page: ft.Page, db: DatabaseManager):
     # Mensajes de estado
     error_text = ft.Text("", color=COLORS["error"])
     success_text = ft.Text("", color=COLORS["success"])
-    
+
     def update_additional_fields(e):
         """Actualiza los campos adicionales según el tipo de usuario"""
         additional_fields.controls.clear()
@@ -367,7 +250,7 @@ def show_register(page: ft.Page, db: DatabaseManager):
             ])
         
         page.update()
-    
+
     def on_register(e):
         """Maneja el evento de registro"""
         # Validaciones básicas
@@ -488,3 +371,202 @@ def show_register(page: ft.Page, db: DatabaseManager):
             page.update()
         finally:
             hide_loading(page, loading)
+        pass  # Mantén todo el contenido de esta función igual
+
+
+        # Configurar el event handler para el dropdown
+    user_type_dropdown.on_change = update_additional_fields
+
+    # Construir la interfaz
+    page.clean()
+    page.add(
+        ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Image(
+                        src="assets/logo.png",
+                        width=150,
+                        height=150,
+                        fit=ft.ImageFit.CONTAIN
+                    ),
+                    ft.Text(
+                        "SportPro", 
+                        size=32, 
+                        weight=ft.FontWeight.BOLD, 
+                        color=COLORS["primary"]
+                    ),
+                    ft.Text(
+                        "Create Account", 
+                        size=16, 
+                        color=COLORS["text"]
+                    ),
+                    create_card(
+                        ft.Column(
+                            controls=[
+                                ft.Text(
+                                    "Register", 
+                                    size=20, 
+                                    weight=ft.FontWeight.BOLD, 
+                                    color=COLORS["text"]
+                                ),
+                                email_field,
+                                password_field,
+                                confirm_password_field,
+                                user_type_dropdown,
+                                additional_fields,
+                                create_button("Register", on_register),
+                                error_text,
+                                success_text,
+                                ft.Row(
+                                    controls=[
+                                        ft.Text(
+                                            "Already have an account?", 
+                                            color=COLORS["text"]
+                                        ),
+                                        ft.TextButton(
+                                            "Login", 
+                                            on_click=lambda e: show_login(page, db),
+                                            style=ft.ButtonStyle(
+                                                color=COLORS["primary"]
+                                            )
+                                        )
+                                    ],
+                                    alignment=ft.MainAxisAlignment.CENTER
+                                )
+                            ],
+                            spacing=15,
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                        )
+                    )
+                ],
+                spacing=20,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
+            ),
+            alignment=ft.alignment.center,
+            padding=40,
+            expand=True
+        )
+    )
+    page.update()
+ 
+
+
+def show_login(page: ft.Page, db: DatabaseManager):
+    """Muestra la pantalla de login"""
+    # Campos del formulario
+    email_field = create_text_field("Email")
+    password_field = create_text_field("Password", password=True)
+    error_text = ft.Text("", color=COLORS["error"])
+    
+    def on_login(e):
+        """Maneja el evento de login"""
+        email = email_field.value.strip()
+        password = password_field.value
+        
+        if not email or not password:
+            error_text.value = "Email and password are required"
+            page.update()
+            return
+        
+        loading = show_loading(page, "Signing in...")
+        
+        try:
+            user = User.authenticate(email, password)
+            
+            if user:
+                user.update_last_login()
+                page.session.set("user_id", user.id)
+                page.session.set("user_type", user.type)
+                
+                # Redirigir según el tipo de usuario
+                if user.type == "administrador":
+                    from views.admin import show_admin_dashboard
+                    show_admin_dashboard(page, db)
+                elif user.type == "entrenador":
+                    from views.coach import show_coach_dashboard
+                    show_coach_dashboard(page, db)
+                else:
+                    from views.athlete import show_athlete_dashboard
+                    show_athlete_dashboard(page, db)
+            else:
+                error_text.value = "Invalid email or password"
+                page.update()
+        except Exception as e:
+            logger.error(f"Login error: {e}")
+            error_text.value = "An error occurred during login"
+            page.update()
+        finally:
+            hide_loading(page, loading)
+    
+    def on_navigate_to_register(e):
+        """Navega a la pantalla de registro"""
+        show_register(page, db)
+    
+    # Construir la interfaz
+    page.clean()
+    page.add(
+        ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Image(
+                        src="assets/logo.png",
+                        width=150,
+                        height=150,
+                        fit=ft.ImageFit.CONTAIN
+                    ),
+                    ft.Text(
+                        "SportPro", 
+                        size=32, 
+                        weight=ft.FontWeight.BOLD, 
+                        color=COLORS["primary"]
+                    ),
+                    ft.Text(
+                        "Sports Management System", 
+                        size=16, 
+                        color=COLORS["text"]
+                    ),
+                    create_card(
+                        ft.Column(
+                            controls=[
+                                ft.Text(
+                                    "Login", 
+                                    size=20, 
+                                    weight=ft.FontWeight.BOLD, 
+                                    color=COLORS["text"]
+                                ),
+                                email_field,
+                                password_field,
+                                create_button("Login", on_login),
+                                error_text,
+                                ft.Row(
+                                    controls=[
+                                        ft.Text(
+                                            "Don't have an account?", 
+                                            color=COLORS["text"]
+                                        ),
+                                        ft.TextButton(
+                                            "Register", 
+                                            on_click=on_navigate_to_register, 
+                                            style=ft.ButtonStyle(
+                                                color=COLORS["primary"]
+                                            )
+                                        )
+                                    ],
+                                    alignment=ft.MainAxisAlignment.CENTER
+                                )
+                            ],
+                            spacing=15,
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                        )
+                    )
+                ],
+                spacing=20,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
+            ),
+            alignment=ft.alignment.center,
+            padding=40,
+            expand=True
+        )
+    )
+    
+    
