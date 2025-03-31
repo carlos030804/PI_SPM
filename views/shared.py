@@ -288,16 +288,27 @@ def show_register(page: ft.Page, db: DatabaseManager):
                 return
         
         loading = show_loading(page, "Creating account...")
+        conn = None  # Variable para mantener la conexión
         
         try:
+            conn = DatabaseManager.start_transaction()  # Obtiene conexión con transacción iniciada
+
+            # # 1. Insertar usuario (sin commit automático)
+            # db.execute_query(user_query, params, commit=False)
+
             # Registrar usuario principal
             hashed_pw = DatabaseManager.hash_password(password)
             query = """
             INSERT INTO usuarios (email, contrasena_hash, tipo, activo) 
             VALUES (%s, %s, %s, 1)
             """
-            db.execute_query(query, (email, hashed_pw, user_type), commit=True)
-            user_id = db.execute_query("SELECT LAST_INSERT_ID() AS id", fetch_one=True)["id"]
+            db.execute_query(query, (email, hashed_pw, user_type), conn=conn)
+
+            # user_id = db.execute_query("SELECT LAST_INSERT_ID() AS id", fetch_one=True)["id"]
+            result = db.execute_query("SELECT LAST_INSERT_ID() AS id", fetch_one=True, conn=conn)
+            if not result:
+                raise Exception("No se pudo obtener el ID del nuevo usuario")
+            user_id = result["id"]
             
             # Registrar perfil específico
             if user_type == "atleta":
@@ -319,18 +330,24 @@ def show_register(page: ft.Page, db: DatabaseManager):
                 )
                 max_hr = 220 - age
                 
-                query = """
+                athlete_query  = """
                 INSERT INTO perfiles_atletas 
                 (id_usuario, nombre_completo, fecha_nacimiento, altura, peso, deporte, 
                 frecuencia_cardiaca_maxima, frecuencia_cardiaca_minima, id_entrenador) 
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
-                db.execute_query(
-                    query,
-                    (user_id, full_name, birth_date, height, weight, sport, 
-                     max_hr, resting_hr, coach_id),
-                    commit=True
-                )
+                # db.execute_query(
+                #     athlete_query,
+                #     (user_id, full_name, birth_date, height, weight, sport, 
+                #      max_hr, resting_hr, coach_id),
+                #     commit=False
+                # )
+                DatabaseManager.execute_query(
+                    athlete_query,
+                    (user_id, full_name, birth_date, height, weight, sport, max_hr, resting_hr, coach_id),
+                    conn=conn  # Usamos la conexión de transacción
+                )       
+
             elif user_type == "entrenador":
                 # Procesar campos de entrenador
                 full_name = additional_fields.controls[0].value
@@ -338,18 +355,25 @@ def show_register(page: ft.Page, db: DatabaseManager):
                 specialty = additional_fields.controls[2].value
                 experience = additional_fields.controls[3].value
                 
-                query = """
+                coach_query  = """
                 INSERT INTO perfiles_entrenadores 
                 (id_usuario, nombre_completo, fecha_nacimiento, especialidad, experiencia) 
                 VALUES (%s, %s, %s, %s, %s)
                 """
-                db.execute_query(
-                    query,
+                # db.execute_query(
+                #     coach_query ,
+                #     (user_id, full_name, birth_date, specialty, experience),
+                #     commit=False
+                # )
+
+                DatabaseManager.execute_query(
+                    coach_query,
                     (user_id, full_name, birth_date, specialty, experience),
-                    commit=True
+                    conn=conn  # Usamos la conexión de transacción
                 )
             
             # Éxito en el registro
+            DatabaseManager.commit_transaction(conn)  # Commit de la transacción
             success_text.value = "Registration successful! You can now login."
             error_text.value = ""
             page.update()
