@@ -167,153 +167,6 @@ def _create_profile_section(page: ft.Page, profile: AthleteProfile) -> ft.Contai
         bgcolor="#F9F9F9"
     )
 
-#def _edit_profile(page: ft.Page, profile: AthleteProfile):
-    """Muestra el diálogo para editar el perfil del atleta"""
-    
-    # Crear campos de texto con los valores actuales
-    full_name_field = ft.TextField(
-        label="Nombre completo",
-        value=profile.full_name,
-        disabled=True
-    )
-    
-    height_field = ft.TextField(
-        label="Altura (cm)",
-        value=str(profile.height),
-        keyboard_type=ft.KeyboardType.NUMBER
-    )
-    
-    weight_field = ft.TextField(
-        label="Peso (kg)",
-        value=str(profile.weight),
-        keyboard_type=ft.KeyboardType.NUMBER
-    )
-    
-    sport_field = ft.TextField(
-        label="Deporte",
-        value=profile.sport
-    )
-    
-    resting_hr_field = ft.TextField(
-        label="Frecuencia cardiaca en reposo (bpm)",
-        value=str(profile.resting_hr) if profile.resting_hr else "",
-        keyboard_type=ft.KeyboardType.NUMBER
-    )
-    
-    max_hr_field = ft.TextField(
-        label="Frecuencia cardiaca máxima (bpm)",
-        value=str(profile.max_hr) if profile.max_hr else "",
-        keyboard_type=ft.KeyboardType.NUMBER
-    )
-    
-    error_text = ft.Text("", color="red")
-    
-    def close_dialog(e):
-        page.dialog.open = False
-        page.update()
-    
-    def save_changes(e):
-        # Validación de datos
-        try:
-            new_height = float(height_field.value) if height_field.value else None
-            new_weight = float(weight_field.value) if weight_field.value else None
-            new_resting_hr = int(resting_hr_field.value) if resting_hr_field.value else None
-            new_max_hr = int(max_hr_field.value) if max_hr_field.value else None
-            
-            if new_height is not None and new_height <= 0:
-                raise ValueError("La altura debe ser mayor que 0")
-            if new_weight is not None and new_weight <= 0:
-                raise ValueError("El peso debe ser mayor que 0")
-            if new_resting_hr is not None and new_resting_hr <= 0:
-                raise ValueError("La FC en reposo debe ser mayor que 0")
-            if new_max_hr is not None and new_max_hr <= 0:
-                raise ValueError("La FC máxima debe ser mayor que 0")
-            if (new_resting_hr is not None and new_max_hr is not None and 
-                new_resting_hr >= new_max_hr):
-                raise ValueError("La FC en reposo debe ser menor que la FC máxima")
-                
-        except ValueError as e:
-            error_text.value = f"Error: {str(e)}"
-            page.update()
-            return
-        
-        # Mostrar indicador de carga
-        loading = show_loading(page)
-        
-        try:
-            # Actualizar el perfil
-            success = profile.update_profile(
-                height=new_height,
-                weight=new_weight,
-                sport=sport_field.value,
-                resting_hr=new_resting_hr
-            )
-            
-            # Actualizar FC máxima si es diferente
-            if new_max_hr != profile.max_hr:
-                try:
-                    query = """
-                    UPDATE perfiles_atletas 
-                    SET frecuencia_cardiaca_maxima = %s
-                    WHERE id_atleta = %s
-                    """
-                    DatabaseManager.execute_query(
-                        query, 
-                        (new_max_hr, profile.id), 
-                        commit=True
-                    )
-                    profile.max_hr = new_max_hr
-                except Exception as e:
-                    logger.error(f"Error updating max HR: {e}")
-                    error_text.value = "Error al actualizar FC máxima"
-                    page.update()
-                    return
-            
-            if success:
-                close_dialog(None)
-                show_alert(page, "Perfil actualizado correctamente", "success")
-                show_athlete_dashboard(page, page.session.get("db"))
-            else:
-                error_text.value = "Error al guardar los cambios"
-                page.update()
-                
-        except Exception as e:
-            logger.error(f"Error saving profile changes: {e}")
-            error_text.value = f"Error inesperado: {str(e)}"
-            page.update()
-        finally:
-            hide_loading(page, loading)
-    
-    # Crear diálogo
-    edit_dialog = ft.AlertDialog(
-        modal=True,
-        title=ft.Text("Editar perfil"),
-        content=ft.Column(
-            controls=[
-                full_name_field,
-                height_field,
-                weight_field,
-                sport_field,
-                resting_hr_field,
-                max_hr_field,
-                error_text
-            ],
-            height=450,
-            width=350,
-            scroll=ft.ScrollMode.AUTO,
-            spacing=10
-        ),
-        actions=[
-            ft.TextButton("Cancelar", on_click=close_dialog),
-            ft.TextButton("Guardar", on_click=save_changes),
-        ],
-        actions_alignment=ft.MainAxisAlignment.END,
-    )
-    
-    # Mostrar diálogo
-    page.dialog = edit_dialog
-    page.dialog.open = True
-    page.update()
 def show_edit_profile(page: ft.Page, profile: AthleteProfile):
     """Muestra una vista mejorada para editar el perfil del atleta con campos centrados, compactos y con iconos"""
     # Crear campos de texto con iconos representativos
@@ -522,18 +375,21 @@ def _create_hr_zones_section(zones: dict, chart_img: str, profile: AthleteProfil
                                     f"{zones[zone]}" if i == len(zones) - 1
                                     else f"{zones[zone]} - {list(zones.values())[i + 1]}"
                                 ))
+                                
                             ]
+                            
                         )
                         for i, zone in enumerate(zones)
                     ],
+                    
                     border=ft.border.all(1, COLORS["primary"]),
-                ),
-                ft.Divider(),
-                ft.Container(
+                ),ft.Container(
                     content=ft.Image(src_base64=chart_img, width=600, height=300),
                     alignment=ft.alignment.center,
                     padding=10
                 )
+                
+                
             ],
             spacing=15
         ),
@@ -610,12 +466,12 @@ def _create_workouts_section(page: ft.Page, workouts: list) -> ft.Container:
 def _view_workout_details(page: ft.Page, workout: dict):
     """Muestra los detalles de un entrenamiento"""
     # Implementación de la vista de detalles
-    pass
+    show_alert(page, f"Workout Details:\n{workout}", "info")
 
 def _mark_workout_completed(page: ft.Page, workout: dict):
     """Marca un entrenamiento como completado"""
     # Implementación de la finalización de entrenamiento
-    pass
+    
 
 def calculate_hr_zones(max_hr: int, resting_hr: int) -> dict:
     """Calcula las zonas de frecuencia cardiaca"""
