@@ -32,6 +32,13 @@ class DatabaseManager:
                 logger.error(f"Error creating database connection pool: {e}")
                 raise
     
+    @staticmethod
+    def fetch_one(query: str, params: tuple) -> dict:
+        with DatabaseManager.get_connection() as conn:
+            with conn.cursor(dictionary=True) as cursor:
+                cursor.execute(query, params)
+                return cursor.fetchone()
+        
     @classmethod
     def get_connection(cls):
         """Obtiene una conexión del pool"""
