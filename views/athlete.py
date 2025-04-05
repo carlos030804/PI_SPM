@@ -83,11 +83,23 @@ def show_athlete_dashboard(page: ft.Page, db):
         hide_loading(page, loading)
 
 def _create_profile_section(page: ft.Page, profile: AthleteProfile) -> ft.Container:
-    """Crea la sección de perfil del atleta con un diseño mejorado"""
+    """Crea la sección de perfil del atleta con un diseño mejorado, incluyendo el nombre del entrenador"""
     coach_name = "No asignado"
+    
+    # Obtener el nombre del entrenador desde la base de datos
     if profile.coach_id:
-        # En una implementación real, obtendrías el nombre del entrenador de la base de datos
-        coach_name = "Nombre del Entrenador"  # Temporal
+        try:
+            query = """
+            SELECT nombre_completo 
+            FROM perfiles_entrenadores 
+            WHERE id_entrenador = %s
+            """
+            result = DatabaseManager.fetch_one(query, (profile.coach_id,))
+            if result:
+                coach_name = result['nombre_completo']
+        except Exception as e:
+            logger.error(f"Error fetching coach name: {e}")
+            coach_name = "Error al obtener el nombre"
 
     return ft.Container(
         content=ft.Column(
@@ -425,11 +437,11 @@ def _create_workouts_section(page: ft.Page, workouts: list) -> ft.Container:
                             items=[
                                 ft.PopupMenuItem(
                                     text="View Details",
-                                    on_click=lambda e, w=w: _view_workout_details(page, w)
+                                    on_click=lambda e, w=w: show_workout_details(page, w)
                                 ),
                                 ft.PopupMenuItem(
                                     text="Mark as Completed",
-                                    on_click=lambda e, w=w: _mark_workout_completed(page, w),
+                                    on_click=lambda e, w=w: show_mark_workout_completed(page, w),
                                     disabled=w['estado'] == 'completado'
                                 )
                             ]
@@ -463,14 +475,95 @@ def _create_workouts_section(page: ft.Page, workouts: list) -> ft.Container:
         padding=15,
         bgcolor="#F9F9F9"
     )
-def _view_workout_details(page: ft.Page, workout: dict):
-    """Muestra los detalles de un entrenamiento"""
-    # Implementación de la vista de detalles
-    show_alert(page, f"Workout Details:\n{workout}", "info")
+def show_workout_details(page: ft.Page, workout: dict):
+    """Redirige a una vista con los detalles del entrenamiento"""
+    page.clean()
+    page.add(
+        ft.Container(
+            content=ft.Column(
+                controls=[
+                    create_app_bar("Detalles del Entrenamiento", actions=[
+                        ft.IconButton(
+                            icon=icons.ARROW_BACK,
+                            on_click=lambda e: show_athlete_dashboard(page, DatabaseManager()),
+                            tooltip="Volver"
+                        )
+                    ]),
+                    ft.Text("Detalles del Entrenamiento", size=24, weight=ft.FontWeight.BOLD, color=COLORS["primary"]),
+                    ft.Divider(),
+                    ft.Text(f"Título:", size=18, weight=ft.FontWeight.BOLD),
+                    ft.Text(workout['titulo'], size=16),
+                    ft.Text(f"Duración Estimada:", size=18, weight=ft.FontWeight.BOLD),
+                    ft.Text(f"{workout['duracion_estimada']} minutos", size=16),
+                    ft.Text(f"Dificultad:", size=18, weight=ft.FontWeight.BOLD),
+                    ft.Text(workout['nivel_dificultad'].capitalize(), size=16),
+                    ft.Text(f"Estado:", size=18, weight=ft.FontWeight.BOLD),
+                    ft.Text(workout['estado'].replace("_", " ").capitalize(), size=16),
+                    ft.ElevatedButton(
+                        "Volver",
+                        on_click=lambda e: show_athlete_dashboard(page, DatabaseManager()),
+                        style=ft.ButtonStyle(bgcolor=COLORS["primary"], color="white")
+                    )
+                ],
+                spacing=15
+            ),
+            padding=20
+        )
+    )
 
-def _mark_workout_completed(page: ft.Page, workout: dict):
-    """Marca un entrenamiento como completado"""
-    # Implementación de la finalización de entrenamiento
+def show_mark_workout_completed(page: ft.Page, workout: dict):
+    """Redirige a una vista para marcar un entrenamiento como completado"""
+    def confirm_completion(e):
+        """Marca el entrenamiento como completado en la base de datos"""
+        try:
+            query = """
+            UPDATE asignaciones_atletas
+            SET estado = 'completado'
+            WHERE id_asignacion = %s
+            """
+            DatabaseManager.execute_query(query, (workout['id_asignacion'],), commit=True)
+            show_alert(page, "Entrenamiento marcado como completado.", "success")
+            show_athlete_dashboard(page, DatabaseManager())  # Redirige al dashboard
+        except Exception as ex:
+            logger.error(f"Error marking workout as completed: {ex}")
+            show_alert(page, "Error al marcar el entrenamiento como completado.", "error")
+
+    page.clean()
+    page.add(
+        ft.Container(
+            content=ft.Column(
+                controls=[
+                    create_app_bar("Marcar como Completado", actions=[
+                        ft.IconButton(
+                            icon=icons.ARROW_BACK,
+                            on_click=lambda e: show_athlete_dashboard(page, DatabaseManager()),
+                            tooltip="Volver"
+                        )
+                    ]),
+                    ft.Text("¿Estás seguro de que deseas marcar este entrenamiento como completado?", size=18, weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Título: {workout['titulo']}", size=16),
+                    ft.Text(f"Duración: {workout['duracion_estimada']} minutos", size=16),
+                    ft.Row(
+                        controls=[
+                            ft.ElevatedButton(
+                                "Confirmar",
+                                on_click=confirm_completion,
+                                style=ft.ButtonStyle(bgcolor=COLORS["primary"], color="white")
+                            ),
+                            ft.ElevatedButton(
+                                "Cancelar",
+                                on_click=lambda e: show_athlete_dashboard(page, DatabaseManager()),
+                                style=ft.ButtonStyle(bgcolor="gray", color="white")
+                            )
+                        ],
+                        spacing=10
+                    )
+                ],
+                spacing=15
+            ),
+            padding=20
+        )
+    )
     
 
 def calculate_hr_zones(max_hr: int, resting_hr: int) -> dict:
