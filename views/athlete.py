@@ -482,13 +482,7 @@ def show_workout_details(page: ft.Page, workout: dict):
         ft.Container(
             content=ft.Column(
                 controls=[
-                    create_app_bar("Detalles del Entrenamiento", actions=[
-                        ft.IconButton(
-                            icon=icons.ARROW_BACK,
-                            on_click=lambda e: show_athlete_dashboard(page, DatabaseManager()),
-                            tooltip="Volver"
-                        )
-                    ]),
+                    
                     ft.Text("Detalles del Entrenamiento", size=24, weight=ft.FontWeight.BOLD, color=COLORS["primary"]),
                     ft.Divider(),
                     ft.Text(f"Título:", size=18, weight=ft.FontWeight.BOLD),
@@ -533,13 +527,7 @@ def show_mark_workout_completed(page: ft.Page, workout: dict):
         ft.Container(
             content=ft.Column(
                 controls=[
-                    create_app_bar("Marcar como Completado", actions=[
-                        ft.IconButton(
-                            icon=icons.ARROW_BACK,
-                            on_click=lambda e: show_athlete_dashboard(page, DatabaseManager()),
-                            tooltip="Volver"
-                        )
-                    ]),
+                    
                     ft.Text("¿Estás seguro de que deseas marcar este entrenamiento como completado?", size=18, weight=ft.FontWeight.BOLD),
                     ft.Text(f"Título: {workout['titulo']}", size=16),
                     ft.Text(f"Duración: {workout['duracion_estimada']} minutos", size=16),

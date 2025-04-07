@@ -11,6 +11,14 @@ from datetime import date, datetime
 
 logger = logging.getLogger(__name__)
 
+def create_app_bar(title: str, actions: list = None) -> ft.AppBar:
+    """Crea un AppBar reutilizable con un título y acciones opcionales"""
+    return ft.AppBar(
+        title=ft.Text(title, size=20, weight=ft.FontWeight.BOLD, color="white"),
+        bgcolor=COLORS["primary"],
+        actions=actions or []
+    )
+
 def show_coach_dashboard(page: ft.Page, db):
     # Mostrar loading
     loading = show_loading(page)
@@ -26,23 +34,26 @@ def show_coach_dashboard(page: ft.Page, db):
         # Obtener datos del entrenador
         athletes = profile.get_assigned_athletes()
         workouts = profile.get_created_workouts()
+
+        # Configurar el AppBar
+        page.appbar = create_app_bar(
+            f"Coach Dashboard - {profile.full_name}",
+            actions=[
+                ft.IconButton(
+                    icon=icons.LOGOUT,
+                    icon_color="white",
+                    on_click=lambda e: logout(page),
+                    tooltip="Logout"
+                )
+            ]
+        )
         
         # Construir UI
         page.clean()
         page.add(
             ft.Column(
                 controls=[
-                    create_app_bar(
-                        f"Coach Dashboard - {profile.full_name}",
-                        actions=[
-                            ft.IconButton(
-                                icon=icons.LOGOUT,
-                                icon_color="white",
-                                on_click=lambda e: logout(page),
-                                tooltip="Logout"
-                            )
-                        ]
-                    ),
+                    
                     ft.Tabs(
                         tabs=[
                             ft.Tab(
@@ -261,20 +272,20 @@ def _create_workouts_tab(page: ft.Page, workouts: list, profile: CoachProfile) -
         expand=True
     )
 
-def logout(page: ft.Page, db):
+def logout(page: ft.Page):
     """Cierra la sesión y redirige al login"""
     try:
-        # Limpiar completamente la página
+        # Limpiar la sesión del usuario
+        page.session.clear()
+
+        # Limpiar la página
         page.clean()
         page.appbar = None  # Eliminar el AppBar actual
-        
-        # Limpiar la sesión
-        page.session.clear()
-        
+
         # Redirigir al login
         from views.shared import show_login
-        show_login(page, db)
-        
+        show_login(page, DatabaseManager())
+
         # Forzar actualización de la página
         page.update()
     except Exception as e:
@@ -371,18 +382,22 @@ def _create_new_workout_tab(page: ft.Page, profile: CoachProfile) -> ft.Containe
 
 def show_workout_details(page: ft.Page, workout: dict):
     """Redirige a una vista con los detalles del entrenamiento"""
+    page.appbar = create_app_bar(
+        "Detalles del Entrenamiento",
+        actions=[
+            ft.IconButton(
+                icon=icons.ARROW_BACK,
+                on_click=lambda e: show_coach_dashboard(page, DatabaseManager()),
+                tooltip="Volver"
+            )
+        ]
+    )
     page.clean()
     page.add(
         ft.Container(
             content=ft.Column(
                 controls=[
-                    create_app_bar("Detalles del Entrenamiento", actions=[
-                        ft.IconButton(
-                            icon=icons.ARROW_BACK,
-                            on_click=lambda e: show_coach_dashboard(page, DatabaseManager()),
-                            tooltip="Volver"
-                        )
-                    ]),
+                    
                     ft.Text("Detalles del Entrenamiento", size=24, weight=ft.FontWeight.BOLD, color=COLORS["primary"]),
                     ft.Divider(),
                     ft.Text(f"Título:", size=18, weight=ft.FontWeight.BOLD),
@@ -406,6 +421,16 @@ def show_workout_details(page: ft.Page, workout: dict):
     )
 def show_edit_workout(page: ft.Page, workout: dict):
     """Redirige a una vista para editar un entrenamiento"""
+    page.appbar = create_app_bar(
+        "Editar Entrenamiento",
+        actions=[
+            ft.IconButton(
+                icon=icons.ARROW_BACK,
+                on_click=lambda e: show_coach_dashboard(page, DatabaseManager()),
+                tooltip="Volver"
+            )
+        ]
+    )
     titulo_field = ft.TextField(label="Título", value=workout['titulo'], width=400)
     duracion_field = ft.TextField(label="Duración (min)", value=str(workout['duracion_estimada']), keyboard_type=ft.KeyboardType.NUMBER, width=400)
     dificultad_dropdown = ft.Dropdown(
@@ -447,13 +472,7 @@ def show_edit_workout(page: ft.Page, workout: dict):
         ft.Container(
             content=ft.Column(
                 controls=[
-                    create_app_bar("Editar Entrenamiento", actions=[
-                        ft.IconButton(
-                            icon=icons.ARROW_BACK,
-                            on_click=lambda e: show_coach_dashboard(page, DatabaseManager()),
-                            tooltip="Volver"
-                        )
-                    ]),
+                    
                     ft.Text("Editar Entrenamiento", size=24, weight=ft.FontWeight.BOLD, color=COLORS["primary"]),
                     ft.Divider(),
                     titulo_field,
@@ -515,13 +534,7 @@ def show_assign_workout(page: ft.Page, workout: dict, profile: CoachProfile):
         ft.Container(
             content=ft.Column(
                 controls=[
-                    create_app_bar("Asignar Entrenamiento", actions=[
-                        ft.IconButton(
-                            icon=icons.ARROW_BACK,
-                            on_click=lambda e: show_coach_dashboard(page, DatabaseManager()),
-                            tooltip="Volver"
-                        )
-                    ]),
+                    
                     ft.Text("Asignar Entrenamiento", size=24, weight=ft.FontWeight.BOLD, color=COLORS["primary"]),
                     ft.Divider(),
                     ft.Column(athlete_checkboxes, spacing=10),
@@ -554,13 +567,7 @@ def show_athlete_profile(page: ft.Page, athlete: dict):
         ft.Container(
             content=ft.Column(
                 controls=[
-                    create_app_bar("Perfil del Atleta", actions=[
-                        ft.IconButton(
-                            icon=icons.ARROW_BACK,
-                            on_click=lambda e: show_coach_dashboard(page, DatabaseManager()),
-                            tooltip="Volver"
-                        )
-                    ]),
+                    
                     ft.Text("Perfil del Atleta", size=24, weight=ft.FontWeight.BOLD, color=COLORS["primary"]),
                     ft.Divider(),
                     ft.Text(f"Nombre:", size=18, weight=ft.FontWeight.BOLD),
@@ -619,13 +626,7 @@ def show_assign_workout_to_athlete(page: ft.Page, athlete: dict, profile: CoachP
         ft.Container(
             content=ft.Column(
                 controls=[
-                    create_app_bar("Asignar Entrenamiento", actions=[
-                        ft.IconButton(
-                            icon=icons.ARROW_BACK,
-                            on_click=lambda e: show_coach_dashboard(page, DatabaseManager()),
-                            tooltip="Volver"
-                        )
-                    ]),
+                    
                     ft.Text("Asignar Entrenamiento", size=24, weight=ft.FontWeight.BOLD, color=COLORS["primary"]),
                     ft.Divider(),
                     ft.Text(f"Atleta: {athlete['nombre_completo']}", size=18, weight=ft.FontWeight.BOLD),
