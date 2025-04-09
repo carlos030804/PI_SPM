@@ -1,7 +1,12 @@
 import flet as ft
 from flet import icons
-from typing import Optional, Callable, Union, List
+from typing import Optional, Callable, Union, List, Dict, Any
 import logging
+import requests
+import re
+import threading
+import time
+from datetime import datetime
 from models import User, AthleteProfile, CoachProfile
 from database import DatabaseManager
 from utils import calculate_hr_zones, create_hr_zones_chart
@@ -200,6 +205,20 @@ def hide_loading(page: ft.Page, loading_control: ft.Container) -> None:
     page.overlay.remove(loading_control)
     page.update()
 
+def fetch_wger_exercises(limit: int = 5) -> Dict[str, Any]:
+    """Obtiene ejercicios de la API de Wger"""
+    try:
+        response = requests.get(
+            "https://wger.de/api/v2/exerciseinfo/",
+            params={"language": 2, "limit": limit},
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        logger.error(f"Error al obtener ejercicios: {str(e)}")
+        return {"error": str(e)}
+
 
 def show_register(page: ft.Page, db: DatabaseManager):
     """Muestra la pantalla de registro"""
@@ -253,7 +272,7 @@ def show_register(page: ft.Page, db: DatabaseManager):
 
     def on_register(e):
         """Maneja el evento de registro"""
-        # Validaciones básicas
+        # Validaciones básicasa
         email = email_field.value.strip()
         password = password_field.value
         confirm_password = confirm_password_field.value
@@ -288,23 +307,21 @@ def show_register(page: ft.Page, db: DatabaseManager):
                 return
         
         loading = show_loading(page, "Creating account...")
-        conn = None  # Variable para mantener la conexión
+        conn = None
         
         try:
-            conn = DatabaseManager.start_transaction()  # Obtiene conexión con transacción iniciada
-
-            # # 1. Insertar usuario (sin commit automático)
-            # db.execute_query(user_query, params, commit=False)
+            conn = db.get_connection()  # Obtener conexión de la base de datos
+            db.start_transaction(conn)  # Iniciar transacción
 
             # Registrar usuario principal
             hashed_pw = DatabaseManager.hash_password(password)
-            query = """
+            user_query = """
             INSERT INTO usuarios (email, contrasena_hash, tipo, activo) 
             VALUES (%s, %s, %s, 1)
             """
-            db.execute_query(query, (email, hashed_pw, user_type), conn=conn)
+            db.execute_query(user_query, (email, hashed_pw, user_type), conn=conn)
 
-            # user_id = db.execute_query("SELECT LAST_INSERT_ID() AS id", fetch_one=True)["id"]
+            # Obtener ID del usuario recién creado
             result = db.execute_query("SELECT LAST_INSERT_ID() AS id", fetch_one=True, conn=conn)
             if not result:
                 raise Exception("No se pudo obtener el ID del nuevo usuario")
@@ -312,7 +329,6 @@ def show_register(page: ft.Page, db: DatabaseManager):
             
             # Registrar perfil específico
             if user_type == "atleta":
-                # Procesar campos de atleta
                 full_name = additional_fields.controls[0].value
                 birth_date = additional_fields.controls[1].value
                 height = float(additional_fields.controls[2].value)
@@ -321,7 +337,7 @@ def show_register(page: ft.Page, db: DatabaseManager):
                 resting_hr = int(additional_fields.controls[5].value)
                 coach_id = additional_fields.controls[6].value or None
                 
-                # Calcular frecuencia cardiaca máxima (220 - edad)
+                # Calcular frecuencia cardiaca máxima
                 from datetime import datetime
                 birth_date_obj = datetime.strptime(birth_date, "%Y-%m-%d").date()
                 today = datetime.now().date()
@@ -330,50 +346,37 @@ def show_register(page: ft.Page, db: DatabaseManager):
                 )
                 max_hr = 220 - age
                 
-                athlete_query  = """
+                athlete_query = """
                 INSERT INTO perfiles_atletas 
                 (id_usuario, nombre_completo, fecha_nacimiento, altura, peso, deporte, 
                 frecuencia_cardiaca_maxima, frecuencia_cardiaca_minima, id_entrenador) 
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
-                # db.execute_query(
-                #     athlete_query,
-                #     (user_id, full_name, birth_date, height, weight, sport, 
-                #      max_hr, resting_hr, coach_id),
-                #     commit=False
-                # )
-                DatabaseManager.execute_query(
+                db.execute_query(
                     athlete_query,
                     (user_id, full_name, birth_date, height, weight, sport, max_hr, resting_hr, coach_id),
-                    conn=conn  # Usamos la conexión de transacción
-                )       
+                    conn=conn
+                )
 
             elif user_type == "entrenador":
-                # Procesar campos de entrenador
                 full_name = additional_fields.controls[0].value
                 birth_date = additional_fields.controls[1].value
                 specialty = additional_fields.controls[2].value
                 experience = additional_fields.controls[3].value
                 
-                coach_query  = """
+                coach_query = """
                 INSERT INTO perfiles_entrenadores 
                 (id_usuario, nombre_completo, fecha_nacimiento, especialidad, experiencia) 
                 VALUES (%s, %s, %s, %s, %s)
                 """
-                # db.execute_query(
-                #     coach_query ,
-                #     (user_id, full_name, birth_date, specialty, experience),
-                #     commit=False
-                # )
-
-                DatabaseManager.execute_query(
+                db.execute_query(
                     coach_query,
                     (user_id, full_name, birth_date, specialty, experience),
-                    conn=conn  # Usamos la conexión de transacción
+                    conn=conn
                 )
             
-            # Éxito en el registro
-            DatabaseManager.commit_transaction(conn)  # Commit de la transacción
+            # Confirmar transacción si todo salió bien
+            db.commit_transaction(conn)
             success_text.value = "Registration successful! You can now login."
             error_text.value = ""
             page.update()
@@ -388,15 +391,18 @@ def show_register(page: ft.Page, db: DatabaseManager):
                 success_text.value = ""
                 page.update()
             
-            page.run_task(lambda: page.run_once(clear_form, delay=3))
-        except Exception as e:  # <- ¡Esto es lo que faltaba!
-            logger.error(f"Error during registration: {e}")
-            error_text.value = "An error occurred during registration"
+            page.run_once(clear_form, 3)
+            
+        except Exception as e:
+            logger.error(f"Error during registration: {e}", exc_info=True)
+            if conn:
+                db.rollback_transaction(conn)
+            error_text.value = f"An error occurred: {str(e)}"
             page.update()
         finally:
             hide_loading(page, loading)
-        pass  # Mantén todo el contenido de esta función igual
-
+            if conn:
+                db.close_connection(conn)
 
         # Configurar el event handler para el dropdown
     user_type_dropdown.on_change = update_additional_fields
@@ -472,8 +478,6 @@ def show_register(page: ft.Page, db: DatabaseManager):
         )
     )
     page.update()
- 
-
 
 def show_login(page: ft.Page, db: DatabaseManager):
     """Muestra la pantalla de login"""
@@ -525,6 +529,7 @@ def show_login(page: ft.Page, db: DatabaseManager):
     def on_navigate_to_register(e):
         """Navega a la pantalla de registro"""
         show_register(page, db)
+
     
     # Construir la interfaz
     page.clean()
@@ -562,6 +567,24 @@ def show_login(page: ft.Page, db: DatabaseManager):
                                 password_field,
                                 create_button("Login", on_login),
                                 error_text,
+                                ft.Divider(height=20, color="transparent"),
+                                ft.Text("Explore example exercises:", size=12),
+                                create_button(
+                                    "View Exercises",
+                                    on_click=lambda e: show_exercises(page),
+                                    icon=icons.FITNESS_CENTER,
+                                    bgcolor=COLORS["secondary"],
+                                    color=COLORS["primary"],
+                                    width=200
+                                ),
+                                create_button(
+                                    "Monitoring",
+                                    on_click=lambda e: show_monitoring(page),
+                                    icon=icons.MONITOR_HEART,
+                                    bgcolor=COLORS["secondary"],
+                                    color=COLORS["primary"],
+                                    width=200
+                                ),
                                 ft.Row(
                                     controls=[
                                         ft.Text(
@@ -592,3 +615,284 @@ def show_login(page: ft.Page, db: DatabaseManager):
             expand=True
         )
     )
+    page.update()
+
+def show_monitoring(page: ft.Page):
+    """Redirige a una vista para mostrar el monitoreo en tiempo real"""
+    import time as time_module
+    from datetime import datetime
+
+    # Variables de estado
+    monitoring_active = True
+    simulation_active = False
+
+    # Crear gráficas
+    heart_rate_chart = ft.LineChart()
+    oxygen_chart = ft.LineChart()
+
+    # Configurar ejes
+    heart_rate_chart.left_axis = ft.ChartAxis(
+        labels=[
+            ft.ChartAxisLabel(value=40, label=ft.Text("40")),
+            ft.ChartAxisLabel(value=80, label=ft.Text("80")),
+            ft.ChartAxisLabel(value=120, label=ft.Text("120"))
+        ],
+        labels_size=40
+    )
+
+    oxygen_chart.left_axis = ft.ChartAxis(
+        labels=[
+            ft.ChartAxisLabel(value=80, label=ft.Text("80")),
+            ft.ChartAxisLabel(value=90, label=ft.Text("90")),
+            ft.ChartAxisLabel(value=100, label=ft.Text("100"))
+        ],
+        labels_size=40
+    )
+
+    # Series de datos
+    hr_series = ft.LineChartData(
+        data_points=[],
+        stroke_width=3,
+        color=ft.colors.RED,
+        curved=True,
+        stroke_cap_round=True,
+    )
+
+    oxy_series = ft.LineChartData(
+        data_points=[],
+        stroke_width=3,
+        color=ft.colors.BLUE,
+        curved=True,
+        stroke_cap_round=True,
+    )
+
+    heart_rate_chart.data_series = [hr_series]
+    oxygen_chart.data_series = [oxy_series]
+
+    # Iniciar simulación automáticamente
+    def start_auto_simulation():
+        nonlocal simulation_active
+        try:
+            response = requests.post("http://localhost:5000/wearable/simular")
+            response.raise_for_status()
+            simulation_active = True
+            show_alert(page, "Simulación automática iniciada", "success")
+        except Exception as e:
+            show_alert(page, f"Error al iniciar simulación: {str(e)}", "error")
+
+    # Función para detener simulación
+    def stop_simulation(e):
+        nonlocal simulation_active
+        try:
+            response = requests.post("http://localhost:5000/wearable/detener")
+            response.raise_for_status()
+            simulation_active = False
+            show_alert(page, "Simulación detenida", "success")
+            e.control.disabled = True
+            page.update()
+        except Exception as e:
+            show_alert(page, f"Error al detener simulación: {str(e)}", "error")
+
+    # Función para actualizar gráficas
+    def update_charts():
+        last_timestamp = None
+        start_auto_simulation()  # Iniciar simulación al abrir
+
+        while monitoring_active:
+            try:
+                response = requests.get("http://localhost:5000/wearable/datos", timeout=5)
+                response.raise_for_status()
+                data = response.json()
+
+                if data:
+                    latest_data = data[-1]
+
+                    if last_timestamp != latest_data["timestamp"]:
+                        # Convertir timestamp
+                        try:
+                            ts = datetime.strptime(
+                                latest_data["timestamp"],
+                                "%Y-%m-%dT%H:%M:%S.%f"
+                            ).timestamp()
+                        except:
+                            ts = time_module.time()
+
+                        # Agregar nuevos puntos
+                        hr_point = ft.LineChartDataPoint(
+                            x=ts,
+                            y=latest_data["pulso_cardiaco"]
+                        )
+                        oxy_point = ft.LineChartDataPoint(
+                            x=ts,
+                            y=latest_data["oxigenacion"]
+                        )
+
+                        hr_series.data_points.append(hr_point)
+                        oxy_series.data_points.append(oxy_point)
+
+                        # Mantener solo los últimos 30 puntos
+                        if len(hr_series.data_points) > 30:
+                            hr_series.data_points.pop(0)
+                            oxy_series.data_points.pop(0)
+
+                        last_timestamp = latest_data["timestamp"]
+                        page.update()
+
+                time_module.sleep(1)  # Actualizar cada segundo
+
+            except Exception as e:
+                logger.error(f"Error en monitoreo: {str(e)}")
+                time_module.sleep(2)
+
+    # Construir la interfaz
+    page.clean()
+    page.appbar = create_app_bar(
+        "Monitor en Tiempo Real",
+        actions=[
+            ft.IconButton(
+                icon=icons.LOGOUT,
+                tooltip="Logout",
+                on_click=lambda e: logout(page),
+            )
+        ],
+    )
+    
+    page.add(
+        ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text(
+                        "Monitoreo en Tiempo Real", 
+                        weight=ft.FontWeight.BOLD, 
+                        size=24, 
+                        color=COLORS["primary"]
+                    ),
+                    
+                    ft.Text("Frecuencia Cardíaca (bpm)", weight=ft.FontWeight.BOLD, size=16),
+                    ft.Container(height=200, content=heart_rate_chart),
+                    ft.Divider(height=20),
+                    ft.Text("Nivel de Oxigenación (%)", weight=ft.FontWeight.BOLD, size=16),
+                    ft.Container(height=200, content=oxygen_chart),
+                    ft.Divider(height=20),
+                    ft.ElevatedButton(
+                        "Detener simulación",
+                        on_click=stop_simulation,
+                        icon=icons.STOP,
+                        style=ft.ButtonStyle(
+                            bgcolor=ft.colors.RED_400,
+                            color=ft.colors.WHITE,
+                            padding=20
+                        ),
+                        width=180
+                    )
+                ],
+                spacing=20
+            ),
+            padding=20
+        )
+    )
+
+    # Iniciar hilo de actualización
+    threading.Thread(target=update_charts, daemon=True).start()
+
+def show_exercises(page: ft.Page):
+    """Redirige a una vista para mostrar ejercicios de la API"""
+    loading = show_loading(page, "Loading exercises...")
+
+    try:
+        # Obtener datos de la API
+        response = requests.get(
+            "https://wger.de/api/v2/exerciseinfo/?language=2&limit=10",
+            params={"language": 2, "limit": 10},
+            timeout=10
+        )
+        response.raise_for_status()
+        exercises_data = response.json()
+
+        if "error" in exercises_data:
+            show_alert(page, f"Error: {exercises_data['error']}", "error")
+            return
+
+        exercises_list = ft.ListView(expand=True, spacing=10)
+
+        for exercise in exercises_data.get("results", []):
+            # Obtener nombre y descripción de las traducciones
+            translations = exercise.get("translations", [])
+            spanish_translation = next(
+                (t for t in translations if t.get("language") == 2),
+                None
+            )
+
+            name = spanish_translation.get("name") if spanish_translation else "Ejercicio sin nombre"
+            description = spanish_translation.get(
+                "description") if spanish_translation else "Descripción no disponible"
+
+            # Limpiar HTML de la descripción
+            clean_description = re.sub('<[^<]+?>', '',
+                                        description) if description else "No hay descripción disponible"
+
+            # Obtener músculos y categoría
+            muscles = ", ".join([m["name"] for m in exercise.get("muscles", [])])
+            category = exercise.get("category", {}).get("name", "Sin categoría")
+
+            exercises_list.controls.append(
+                create_card(
+                    content=ft.Column([
+                        ft.Text(name, weight=ft.FontWeight.BOLD, size=14),
+                        ft.Text(f"Categoría: {category}", size=12),
+                        ft.Text(f"Músculos: {muscles or 'No especificado'}", size=12),
+                        ft.Text(clean_description, size=12, color=COLORS["text"])
+                    ], spacing=5),
+                    padding=10,
+                    margin=5
+                )
+            )
+
+        # Construir la interfaz
+        page.clean()
+        page.appbar = create_app_bar(
+            "Biblioteca de Ejercicios",
+            actions=[
+                ft.IconButton(
+                    icon=icons.LOGOUT,
+                    tooltip="Logout",
+                    on_click=lambda e: logout(page),
+                )
+            ],
+        )
+        page.add(
+            ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text("Ejercicios de la API Wger", weight=ft.FontWeight.BOLD, size=20),
+                        exercises_list
+                    ],
+                    spacing=20
+                ),
+                padding=20
+            )
+        )
+
+    except requests.RequestException as e:
+        logger.error(f"Error al obtener ejercicios: {str(e)}")
+        show_alert(page, f"Error al cargar ejercicios: {str(e)}", "error")
+    finally:
+        hide_loading(page, loading)
+        page.update()
+
+def logout(page: ft.Page):
+    """Maneja el evento de logout"""
+    try:
+        page.session.clear()
+
+        page.clean()
+        page.appbar = None
+
+        from views.shared import show_login
+        show_login(page, DatabaseManager())
+
+        page.update()
+    except Exception as e:
+        logger.error(f"Error during logout: {e}")
+        show_alert(page, "An error occurred during logout", "error")
+        page.update()
